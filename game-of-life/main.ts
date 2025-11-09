@@ -59,10 +59,25 @@ const vertexBufferLayout: GPUVertexBufferLayout = {
   }],
 };
 
+// Create an array representing the active state of each cell.
+const cellStateArray = new Uint32Array(GRID_SIZE * GRID_SIZE);
+// Mark every third cell of the grid as active.
+for (let i = 0; i < cellStateArray.length; i += 3) {
+  cellStateArray[i] = 1;
+}
+// Create a storage buffer to hold the cell state.
+const cellStateStorage = device.createBuffer({
+  label: "Cell State",
+  size: cellStateArray.byteLength,
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+});
+device.queue.writeBuffer(cellStateStorage, 0, cellStateArray);
+
 const cellShaderModule = device.createShaderModule({
   label: "Cell shader",
   code: /* wgsl */`
     @group(0) @binding(0) var<uniform> grid: vec2f;
+    @group(0) @binding(1) var<storage> cellState: array<u32>;
 
     struct VertexInput {
       @location(0) pos: vec2f,
@@ -77,13 +92,14 @@ const cellShaderModule = device.createShaderModule({
     @vertex
     fn vertexMain(input: VertexInput) -> VertexOutput  {
       let i = f32(input.instance);
+      let state = f32(cellState[input.instance]);
       let cell = vec2f(i % grid.x, floor(i / grid.x));
       let cellOffset = cell / grid * 2;
-      let gridPos = (input.pos + 1) / grid - 1 + cellOffset;
+      let gridPos = (input.pos * state + 1) / grid - 1 + cellOffset;
       
       var output: VertexOutput;
       output.pos = vec4f(gridPos, 0, 1);
-      output.cell = cell; // New line!
+      output.cell = cell;
       return output;
     }
 
@@ -118,6 +134,9 @@ const bindGroup = device.createBindGroup({
   entries: [{
     binding: 0,
     resource: { buffer: uniformBuffer }
+  }, {
+    binding: 1,
+    resource: { buffer: cellStateStorage }
   }],
 });
 
