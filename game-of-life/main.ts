@@ -70,12 +70,12 @@ const cellStateStorage = [
   }),
   device.createBuffer({
     label: "Cell State B",
-     size: cellStateArray.byteLength,
-     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    size: cellStateArray.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   })
 ];
 // Mark every third cell of the first grid as active.
-for (let i = 0; i < cellStateArray.length; i+=3) {
+for (let i = 0; i < cellStateArray.length; i += 3) {
   cellStateArray[i] = 1;
 }
 device.queue.writeBuffer(cellStateStorage[0], 0, cellStateArray);
@@ -89,17 +89,16 @@ const bindGroupLayout = device.createBindGroupLayout({
   label: "Cell Bind Group Layout",
   entries: [{
     binding: 0,
-    // Add GPUShaderStage.FRAGMENT here if you are using the `grid` uniform in the fragment shader.
-    visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
+    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT| GPUShaderStage.COMPUTE,
     buffer: {} // Grid uniform buffer
   }, {
     binding: 1,
     visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
-    buffer: { type: "read-only-storage"} // Cell state input buffer
+    buffer: { type: "read-only-storage" } // Cell state input buffer
   }, {
     binding: 2,
     visibility: GPUShaderStage.COMPUTE,
-    buffer: { type: "storage"} // Cell state output buffer
+    buffer: { type: "storage" } // Cell state output buffer
   }]
 });
 
@@ -137,7 +136,7 @@ const bindGroups = [
 
 const pipelineLayout = device.createPipelineLayout({
   label: "Cell Pipeline Layout",
-  bindGroupLayouts: [ bindGroupLayout ],
+  bindGroupLayouts: [bindGroupLayout],
 });
 
 const cellShaderModule = device.createShaderModule({
@@ -235,9 +234,17 @@ const UPDATE_INTERVAL = 200; // Update every 200ms (5 times/sec)
 let step = 0; // Track how many simulation steps have been run
 
 function updateGrid() {
-  step++; // Increment the step count
-
   const encoder = device.createCommandEncoder();
+
+  const computePass = encoder.beginComputePass();
+  computePass.setPipeline(simulationPipeline);
+  computePass.setBindGroup(0, bindGroups[step % 2]);
+  const workgroupCount = Math.ceil(GRID_SIZE / WORKGROUP_SIZE);
+  computePass.dispatchWorkgroups(workgroupCount, workgroupCount);
+  computePass.end();
+
+  step++;
+
   const pass = encoder.beginRenderPass({
     colorAttachments: [{
       view: context!.getCurrentTexture().createView(),
@@ -246,9 +253,8 @@ function updateGrid() {
       storeOp: "store",
     }]
   });
-
   pass.setPipeline(cellPipeline);
-  pass.setBindGroup(0, bindGroups[step % 2]); // Updated!
+  pass.setBindGroup(0, bindGroups[step % 2]);
   pass.setVertexBuffer(0, vertexBuffer);
   pass.draw(vertices.length / 2, GRID_SIZE * GRID_SIZE);
 
